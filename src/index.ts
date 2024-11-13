@@ -192,7 +192,9 @@ export default Server(() => {
             bedrooms,
             propertyType,
             furnished,
-            petsAllowed
+            petsAllowed,
+            page = 1,
+            limit = 10
         } = req.query;
 
         let properties = propertiesStorage.values()
@@ -213,7 +215,11 @@ export default Server(() => {
         if (petsAllowed) properties = properties.filter(p => 
             p.specifications.petsAllowed === Boolean(petsAllowed));
 
-        res.json(properties);
+        // Pagination
+        const startIndex = (Number(page) - 1) * Number(limit);
+        const paginatedProperties = properties.slice(startIndex, startIndex + Number(limit));
+
+        res.json(paginatedProperties);
     });
 
     // Application Routes
@@ -292,64 +298,14 @@ export default Server(() => {
     app.get("/messages/:userId", (req, res) => {
         const userId = req.params.userId;
         const messages = messagesStorage.values()
-            .filter(m => m.senderId === userId || m.receiverId === userId)
-            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+            .filter(message => message.receiverId === userId);
         res.json(messages);
     });
 
-    // Analytics Routes
-    app.get("/analytics/properties/:propertyId", (req, res) => {
-        const propertyId = req.params.propertyId;
-        const property = propertiesStorage.get(propertyId);
-        
-        if (!("Some" in property)) {
-            return res.status(404).json({ error: "Property not found" });
-        }
-
-        const reviews = reviewsStorage.values()
-            .filter(r => r.propertyId === propertyId);
-        
-        const analytics = {
-            views: property.Some.views,
-            favorites: property.Some.favoriteCount,
-            averageRating: calculateAverageRating(reviews),
-            totalReviews: reviews.length,
-            occupancyRate: calculateOccupancyRate(propertyId),
-            viewToApplicationRate: calculateViewToApplicationRate(propertyId)
-        };
-
-        res.json(analytics);
-    });
-
     // Helper Functions
-    function calculateAverageRating(reviews: Review[]): number {
-        if (reviews.length === 0) return 0;
-        const sum = reviews.reduce((acc, review) => acc + review.rating, 0);
-        return sum / reviews.length;
+    function getCurrentDate(): Date {
+        return new Date();
     }
 
-    function calculateOccupancyRate(propertyId: string): number {
-        const rentals = rentalsStorage.values()
-            .filter(r => r.propertyId === propertyId && r.status === 'active');
-        return rentals.length > 0 ? 100 : 0;
-    }
-
-    function calculateViewToApplicationRate(propertyId: string): number {
-        const property = propertiesStorage.get(propertyId);
-        if (!("Some" in property)) return 0;
-        
-        const applications = applicationsStorage.values()
-            .filter(a => a.propertyId === propertyId);
-        
-        return property.Some.views > 0 
-            ? (applications.length / property.Some.views) * 100 
-            : 0;
-    }
-
-    return app.listen();
+    return app;
 });
-
-function getCurrentDate() {
-    const timestamp = new Number(ic.time());
-    return new Date(timestamp.valueOf() / 1000_000);
-}
